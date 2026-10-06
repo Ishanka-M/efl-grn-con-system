@@ -1745,51 +1745,66 @@ elif page == "Attachments":
                          "— add one here", expanded=att.empty):
             mc1, mc2 = st.columns([1, 2])
             with mc1:
-                pick_asn = st.selectbox("ASN No", missing_asns, key="missing_asn_pick")
+                pick_asns = st.multiselect(
+                    "ASN No — select one or more", missing_asns,
+                    key="missing_asn_pick",
+                    help="Pick several ASNs to link them all to the same "
+                         "document(s) you upload below.")
                 inv_opts = sorted({
                     clean(part)
                     for s in att["INVOICE NUMBER"].astype(str)
                     for part in s.split(",")
                     if clean(part)
                 }) if not att.empty else []
-                pick_invs = st.multiselect(
-                    "Invoice Number(s) (optional)", inv_opts,
-                    accept_new_options=True, key="missing_asn_invs",
-                    help="Type an invoice number and press Enter. Add several to "
-                         "link this one document to more than one invoice.")
+                pick_inv_sel = st.multiselect(
+                    "Invoice Number(s) — pick existing", inv_opts,
+                    key="missing_asn_inv_sel",
+                    help="Pick one or more invoices already on file to link to "
+                         "this document.") if inv_opts else []
+                pick_inv_new = st.text_input(
+                    "Add invoice number(s)", key="missing_asn_inv_new",
+                    placeholder="e.g. INV-1001, INV-1002",
+                    help="Type one or more new invoice numbers separated by "
+                         "commas — all of them link to this one document.")
             with mc2:
                 pick_files = st.file_uploader(
                     "Photos, scanned invoice, delivery note, packing list, etc.",
                     type=["jpg", "jpeg", "png", "webp", "pdf", "xlsx", "xls", "xlsm"],
                     accept_multiple_files=True, key="missing_asn_files")
             if st.button("Upload attachment(s)", type="primary",
-                        disabled=not pick_files, key="missing_asn_upload"):
+                        disabled=not (pick_files and pick_asns),
+                        key="missing_asn_upload"):
                 ts, user = now_str(), SS["user"] or "unknown"
+                inv_all = list(pick_inv_sel) + \
+                    pick_inv_new.replace("\n", ",").split(",")
                 inv_joined = ", ".join(dict.fromkeys(
-                    clean(x) for x in pick_invs if clean(x)))
+                    clean(x) for x in inv_all if clean(x)))
                 up_rows, failed = [], []
                 for f in pick_files:
                     b = f.getvalue()
                     ftype = attach_file_type(f.name)
                     try:
-                        key = storage.object_key(pick_asn, f.name)
+                        # Upload the file once, then link it to every ASN picked.
+                        key = storage.object_key(pick_asns[0], f.name)
                         if ftype in ("PDF", "EXCEL"):
                             url, _ = storage.upload_compressed(b, key, f.type)
                         else:
                             url = storage.upload(b, key, f.type)
+                    except Exception as e:
+                        failed.append(f"{f.name}: {e}")
+                        continue
+                    for asn in pick_asns:
                         up_rows.append({
                             "ATTACH ID": uuid.uuid4().hex[:10].upper(),
-                            "ASN NO": pick_asn, "INVOICE NUMBER": inv_joined,
+                            "ASN NO": asn, "INVOICE NUMBER": inv_joined,
                             "FILE NAME": f.name, "FILE TYPE": ftype, "FILE URL": url,
                             "SIZE KB": round(len(b) / 1024, 1),
                             "UPLOADED AT": ts, "UPLOADED BY": user, "NOTE": "",
                         })
-                    except Exception as e:
-                        failed.append(f"{f.name}: {e}")
                 if up_rows:
                     gsheets.upsert("ATTACHMENTS", up_rows)
-                    ui.celebrate(f"{len(up_rows)} file(s) added",
-                                f"ASN {pick_asn}")
+                    ui.celebrate(f"{len(up_rows)} attachment link(s) added",
+                                f"{len(pick_files)} file(s) × {len(pick_asns)} ASN(s)")
                 if failed:
                     st.error("Some files failed to upload:\n\n"
                              + "\n".join(f"- {x}" for x in failed))
