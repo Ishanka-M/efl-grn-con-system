@@ -1746,8 +1746,17 @@ elif page == "Attachments":
             mc1, mc2 = st.columns([1, 2])
             with mc1:
                 pick_asn = st.selectbox("ASN No", missing_asns, key="missing_asn_pick")
-                pick_inv = st.text_input("Invoice Number (optional)",
-                                         key="missing_asn_inv")
+                inv_opts = sorted({
+                    clean(part)
+                    for s in att["INVOICE NUMBER"].astype(str)
+                    for part in s.split(",")
+                    if clean(part)
+                }) if not att.empty else []
+                pick_invs = st.multiselect(
+                    "Invoice Number(s) (optional)", inv_opts,
+                    accept_new_options=True, key="missing_asn_invs",
+                    help="Type an invoice number and press Enter. Add several to "
+                         "link this one document to more than one invoice.")
             with mc2:
                 pick_files = st.file_uploader(
                     "Photos, scanned invoice, delivery note, packing list, etc.",
@@ -1756,6 +1765,8 @@ elif page == "Attachments":
             if st.button("Upload attachment(s)", type="primary",
                         disabled=not pick_files, key="missing_asn_upload"):
                 ts, user = now_str(), SS["user"] or "unknown"
+                inv_joined = ", ".join(dict.fromkeys(
+                    clean(x) for x in pick_invs if clean(x)))
                 up_rows, failed = [], []
                 for f in pick_files:
                     b = f.getvalue()
@@ -1768,7 +1779,7 @@ elif page == "Attachments":
                             url = storage.upload(b, key, f.type)
                         up_rows.append({
                             "ATTACH ID": uuid.uuid4().hex[:10].upper(),
-                            "ASN NO": pick_asn, "INVOICE NUMBER": clean(pick_inv),
+                            "ASN NO": pick_asn, "INVOICE NUMBER": inv_joined,
                             "FILE NAME": f.name, "FILE TYPE": ftype, "FILE URL": url,
                             "SIZE KB": round(len(b) / 1024, 1),
                             "UPLOADED AT": ts, "UPLOADED BY": user, "NOTE": "",
@@ -1808,7 +1819,8 @@ elif page == "Attachments":
         ql = q.strip().lower()
         view = view[
             view["ASN NO"].astype(str).map(nkey).eq(qn)
-            | view["INVOICE NUMBER"].astype(str).map(nkey).eq(qn)
+            | view["INVOICE NUMBER"].astype(str).map(
+                lambda s: qn in {nkey(p) for p in str(s).split(",")})
             | view["FILE NAME"].astype(str).str.lower().str.contains(ql, regex=False)
         ]
     if type_f != "All types":
