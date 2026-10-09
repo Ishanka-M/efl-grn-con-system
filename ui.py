@@ -15,6 +15,8 @@ import html
 
 import streamlit as st
 
+import assets
+
 # ───────────────────────────── tokens (dark theme) ─────────────────────────────
 # Every colour the app uses lives here. app.py imports these same names for
 # the top nav bar and popovers, so nothing is ever hardcoded twice with a
@@ -357,6 +359,50 @@ def inject_css():
       transition-duration:.001ms !important; }}
   }}
 </style>
+""", unsafe_allow_html=True)
+
+
+def footer():
+    """A fixed brand footer pinned to the bottom of every page.
+
+    Injected once, right after the stylesheet, so it rides above page code
+    and shows even on screens that end early with st.stop() (login, the
+    attachments gate, …). The 3PL | efl logo is an embedded data URI, so it
+    needs no external hosting; the author credit is highlighted in brand
+    colour with a soft shimmer.
+    """
+    st.markdown(f"""
+<style>
+  @keyframes footShimmer {{ to {{ background-position:200% center; }} }}
+  /* leave room so the fixed bar never covers page content */
+  .block-container {{ padding-bottom:4.4rem !important; }}
+  .appfoot {{ position:fixed; left:0; right:0; bottom:0; z-index:60;
+      display:flex; align-items:center; justify-content:center;
+      gap:.7rem; flex-wrap:wrap; padding:.34rem .9rem;
+      background:rgba(9,14,24,.86); backdrop-filter:blur(9px);
+      border-top:1px solid {LINE};
+      font-size:.73rem; color:{MUTED}; }}
+  .appfoot img {{ height:19px; display:block; background:#fff;
+      padding:2px 6px; border-radius:5px;
+      box-shadow:0 1px 4px rgba(0,0,0,.35); }}
+  .appfoot .sep {{ color:{FAINT}; }}
+  .appfoot .by {{ color:{INK_2}; font-weight:560; letter-spacing:.01em; }}
+  .appfoot .by b {{ font-weight:800;
+      background:linear-gradient(90deg,{ACCENT} 10%,{INK} 45%,{ACCENT} 80%);
+      background-size:200% auto; -webkit-background-clip:text;
+      background-clip:text; -webkit-text-fill-color:transparent;
+      animation:footShimmer 4.5s linear infinite;
+      padding:0 .05rem; }}
+  @media (max-width:640px) {{ .appfoot {{ font-size:.68rem; gap:.5rem; }}
+      .appfoot img {{ height:16px; }} }}
+  @media (prefers-reduced-motion: reduce) {{
+      .appfoot .by b {{ animation:none; }} }}
+</style>
+<div class="appfoot">
+  <img src="{assets.LOGO_DATA_URI}" alt="3PL | efl"/>
+  <span class="sep">•</span>
+  <span class="by">Developed by <b>Ishanka_M</b></span>
+</div>
 """, unsafe_allow_html=True)
 
 

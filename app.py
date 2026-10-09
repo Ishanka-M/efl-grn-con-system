@@ -36,6 +36,7 @@ from ui import ACCENT, DANGER, INFO, INK, LINE, MUTED, OK, WARN
 st.set_page_config(page_title="ASN / GRN Control System",
                    page_icon="\U0001F4E6", layout="wide")
 ui.inject_css()
+ui.footer()
 
 
 def fig_style(fig, height=300, legend=False):
