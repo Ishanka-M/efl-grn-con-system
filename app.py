@@ -24,6 +24,7 @@ import gsheets
 import matching
 import parsing
 import pipeline
+import realtime
 import reporting
 import schema
 import storage
@@ -201,6 +202,7 @@ SS.setdefault("recon", None)         # last manual reconciliation result
 SS.setdefault("email", None)
 SS.setdefault("backup", None)
 SS.setdefault("drive_diag", None)
+realtime.init()
 
 # Pages the restricted "Dashboard" login can see. Central System sees
 # everything, unrestricted.
@@ -212,28 +214,103 @@ CENTRAL_PASSWORD = "123456"
 if SS["access_level"] is None:
     st.markdown(f"""
     <style>
-      .block-container {{ padding-top: 3.5rem; }}
-      .login-card {{
-          background: {ui.SURFACE}; border: 1px solid {ui.LINE};
-          border-radius: 14px; padding: 2rem 2.2rem 1.6rem 2.2rem;
-          max-width: 380px; margin: 2rem auto 0 auto;
+      .block-container {{ padding-top: 4.5rem; position: relative; z-index: 2; }}
+
+      /* ── animated backdrop (behind everything, click-through) ── */
+      @keyframes auroraDrift {{
+        0%   {{ transform: translate(0,0) scale(1); }}
+        50%  {{ transform: translate(6%, 4%) scale(1.15); }}
+        100% {{ transform: translate(0,0) scale(1); }}
       }}
+      @keyframes floatUp {{
+        0%   {{ transform: translateY(0) translateX(0); opacity:0; }}
+        12%  {{ opacity:.7; }}
+        88%  {{ opacity:.7; }}
+        100% {{ transform: translateY(-92vh) translateX(22px); opacity:0; }}
+      }}
+      @keyframes gridPan {{
+        from {{ background-position: 0 0; }}
+        to   {{ background-position: 46px 46px; }}
+      }}
+      .login-stage {{ position: fixed; inset: 0; z-index: 0; overflow: hidden;
+          pointer-events: none;
+          background:
+            radial-gradient(1200px 700px at 50% -10%, {ACCENT}14, transparent 60%),
+            linear-gradient(180deg, {ui.BG}, #070d17 70%); }}
+      .login-stage .grid {{ position:absolute; inset:-2px; opacity:.35;
+          background-image:
+            linear-gradient({ui.LINE}55 1px, transparent 1px),
+            linear-gradient(90deg, {ui.LINE}55 1px, transparent 1px);
+          background-size:46px 46px; animation:gridPan 9s linear infinite;
+          -webkit-mask-image:radial-gradient(900px 600px at 50% 32%, #000 30%, transparent 75%);
+                  mask-image:radial-gradient(900px 600px at 50% 32%, #000 30%, transparent 75%); }}
+      .login-stage .blob {{ position:absolute; border-radius:50%;
+          filter: blur(60px); opacity:.5; animation: auroraDrift 14s ease-in-out infinite; }}
+      .login-stage .b1 {{ width:460px; height:460px; left:-6%; top:-8%;
+          background:{ACCENT}; }}
+      .login-stage .b2 {{ width:420px; height:420px; right:-8%; top:10%;
+          background:{ui.INFO}; animation-delay:-5s; opacity:.32; }}
+      .login-stage .b3 {{ width:380px; height:380px; left:38%; bottom:-14%;
+          background:{ui.ACCENT_2}; animation-delay:-9s; opacity:.38; }}
+      .login-stage .p {{ position:absolute; bottom:-12px; width:5px; height:5px;
+          border-radius:50%; background:{ACCENT}; box-shadow:0 0 8px {ACCENT};
+          animation:floatUp linear infinite; }}
+      .login-stage .p:nth-child(4)  {{ left:12%; animation-duration:11s; animation-delay:0s; }}
+      .login-stage .p:nth-child(5)  {{ left:26%; animation-duration:14s; animation-delay:3s; background:{ui.INFO}; box-shadow:0 0 8px {ui.INFO}; }}
+      .login-stage .p:nth-child(6)  {{ left:44%; animation-duration:9s;  animation-delay:1.5s; }}
+      .login-stage .p:nth-child(7)  {{ left:61%; animation-duration:13s; animation-delay:4s; }}
+      .login-stage .p:nth-child(8)  {{ left:76%; animation-duration:10s; animation-delay:2s; background:{ui.INFO}; box-shadow:0 0 8px {ui.INFO}; }}
+      .login-stage .p:nth-child(9)  {{ left:88%; animation-duration:15s; animation-delay:5.5s; }}
+
+      /* ── brand card ── */
+      @keyframes cardRise {{
+        from {{ opacity:0; transform:translateY(16px) scale(.98); }}
+        to   {{ opacity:1; transform:translateY(0) scale(1); }}
+      }}
+      @keyframes markGlow {{
+        0%,100% {{ box-shadow:0 0 0 0 {ACCENT}00, 0 8px 22px {ACCENT}30; transform:translateY(0); }}
+        50%     {{ box-shadow:0 0 0 10px {ACCENT}00, 0 14px 30px {ACCENT}55; transform:translateY(-3px); }}
+      }}
+      @keyframes shimmer {{ to {{ background-position:200% center; }} }}
+
+      .login-card-wrap {{ position:relative; z-index:2; max-width:400px;
+          margin:1.5rem auto .2rem auto; padding:1.9rem 2rem 1.4rem 2rem;
+          border-radius:18px; text-align:center;
+          background:linear-gradient(180deg, {ui.SURFACE}f2, {ui.SURFACE}cc);
+          border:1px solid {ui.LINE}; backdrop-filter:blur(10px);
+          box-shadow:0 24px 70px rgba(0,0,0,.55), inset 0 1px 0 #ffffff0a;
+          animation:cardRise .7s cubic-bezier(.2,.8,.2,1) both; }}
       .login-mark {{
-          width: 44px; height: 44px; border-radius: 10px;
-          background: linear-gradient(135deg, {ACCENT}, {ui.ACCENT_2});
-          color: #04211d; font-weight: 800; font-size: 1.05rem;
-          display: flex; align-items: center; justify-content: center;
-          margin: 0 auto .9rem auto;
-      }}
-      .login-title {{ text-align: center; font-size: 1.05rem; font-weight: 700;
-          color: {INK}; margin-bottom: .15rem; }}
-      .login-sub {{ text-align: center; font-size: .8rem; color: {MUTED};
-          margin-bottom: 1.3rem; }}
+          width:56px; height:56px; border-radius:15px;
+          background:linear-gradient(135deg, {ACCENT}, {ui.ACCENT_2});
+          color:#04211d; font-weight:850; font-size:1.2rem; letter-spacing:.02em;
+          display:flex; align-items:center; justify-content:center;
+          margin:0 auto 1rem auto; animation:markGlow 3.2s ease-in-out infinite; }}
+      .login-title {{ font-size:1.22rem; font-weight:760; letter-spacing:-.02em;
+          margin-bottom:.25rem;
+          background:linear-gradient(90deg, {INK} 10%, {ACCENT} 40%, {INK} 70%);
+          background-size:200% auto; -webkit-background-clip:text;
+          background-clip:text; -webkit-text-fill-color:transparent;
+          animation:shimmer 5s linear infinite; }}
+      .login-sub {{ font-size:.82rem; color:{MUTED}; margin-bottom:.2rem; }}
+      .login-sub .dotlive {{ display:inline-block; width:7px; height:7px;
+          border-radius:50%; background:{OK}; margin-right:.4rem;
+          box-shadow:0 0 0 0 {OK}aa; animation:markGlow 2s ease-in-out infinite; }}
+
+      /* let the sign-in widgets float above the backdrop */
+      [data-testid="stRadio"], .stTextInput, .stButton, [data-testid="stCaptionContainer"] {{
+          position:relative; z-index:2; }}
     </style>
+    <div class="login-stage">
+      <div class="grid"></div>
+      <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+      <span class="p"></span><span class="p"></span><span class="p"></span>
+      <span class="p"></span><span class="p"></span><span class="p"></span>
+    </div>
     <div class="login-card-wrap">
       <div class="login-mark">GRN</div>
       <div class="login-title">ASN / GRN Control</div>
-      <div class="login-sub">Sign in to continue</div>
+      <div class="login-sub"><span class="dotlive"></span>Real-time control system — sign in to continue</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -495,7 +572,8 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-pc1, pc2, pc3, pc4, pc5, pc_sp = st.columns([1.1, 1.1, 1, 1.2, 1, 2])
+pc1, pc2, pc3, pc4, pc5, pc6, pc_sp = st.columns(
+    [1.1, 1.1, .95, .95, 1.15, .95, 1.6])
 
 with pc1:
     with st.popover("👤 Operator", use_container_width=True):
@@ -516,11 +594,14 @@ with pc2:
             st.success("✅ Admin access granted") if SS["role"] == "admin" else st.error("❌ Wrong PIN")
 
 with pc3:
+    realtime.render_control()
+
+with pc4:
     if st.button("🔄 Data", key="refresh_btn", use_container_width=True):
         gsheets.refresh()
         st.rerun()
 
-with pc4:
+with pc5:
     with st.popover("ℹ️ Status", use_container_width=True):
         st.markdown(f"**Login:** {'Central System' if SS['access_level'] == 'central' else 'Dashboard'}")
         st.markdown(f"**Operator:** {SS['user'] or 'not set'}")
@@ -534,11 +615,16 @@ with pc4:
         if _new_tabs:
             st.info(f"✅ Created sheets: {', '.join(_new_tabs)}")
 
-with pc5:
+with pc6:
     if st.button("🚪 Log out", key="logout_btn", use_container_width=True):
         SS["access_level"] = None
         SS["role"] = "user"
         st.rerun()
+
+# Real-time engine: animated LIVE pill + the auto-refresh ticker. The ticker
+# repaints every page on the chosen interval while Live is on (see realtime.py).
+realtime.live_banner()
+realtime.engine()
 
 # Navigation — 4 category buttons; clicking one drops down that category's
 # pages below it, like a real dropdown menu. Picking a page closes the

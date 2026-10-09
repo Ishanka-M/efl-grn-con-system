@@ -291,6 +291,74 @@ def inject_css():
 </style>
 """, unsafe_allow_html=True)
 
+    # ── smart UI: motion layer ──────────────────────────────────────
+    # A single, global animation pass. Because it rides on the shared
+    # stylesheet, every page inherits the same entrance and hover feel
+    # with no per-page code. Kept subtle and GPU-cheap (opacity/transform
+    # only), and fully disabled for users who prefer reduced motion.
+    st.markdown(f"""
+<style>
+  @keyframes riseIn {{
+    from {{ opacity:0; transform:translateY(10px); }}
+    to   {{ opacity:1; transform:translateY(0); }}
+  }}
+  @keyframes ruleGrow {{ from {{ transform:scaleX(0); }} to {{ transform:scaleX(1); }} }}
+  @keyframes popIn {{
+    0%   {{ opacity:0; transform:scale(.8); }}
+    60%  {{ opacity:1; transform:scale(1.08); }}
+    100% {{ transform:scale(1); }}
+  }}
+
+  /* page header + section headings animate in */
+  .ph {{ animation:riseIn .4s ease both; }}
+  .ph .rule {{ transform-origin:left center; animation:ruleGrow .55s .12s ease both; }}
+  .sec {{ animation:riseIn .38s ease both; }}
+  .sec .t .n {{ animation:popIn .5s .05s ease both; }}
+
+  /* content blocks rise into place */
+  .grid, .pipe, .note, .empty, .kv, .file {{ animation:riseIn .42s ease both; }}
+  .stat {{ animation:riseIn .46s ease both; }}
+  /* a gentle stagger across a KPI row so cards cascade */
+  .grid .stat:nth-child(2) {{ animation-delay:.05s; }}
+  .grid .stat:nth-child(3) {{ animation-delay:.10s; }}
+  .grid .stat:nth-child(4) {{ animation-delay:.15s; }}
+  .grid .stat:nth-child(5) {{ animation-delay:.20s; }}
+
+  /* native bordered containers (st.container(border=True)) + tables lift */
+  div[data-testid="stVerticalBlockBorderWrapper"] {{
+      border-radius:12px; transition:border-color .18s ease,
+      box-shadow .18s ease, transform .18s ease; }}
+  div[data-testid="stVerticalBlockBorderWrapper"]:hover {{
+      border-color:{ACCENT}45; box-shadow:0 6px 18px rgba(0,0,0,.38);
+      transform:translateY(-2px); }}
+  div[data-testid="stDataFrame"] {{ animation:riseIn .42s ease both;
+      transition:border-color .18s ease, box-shadow .18s ease; }}
+  div[data-testid="stDataFrame"]:hover {{ border-color:{ACCENT}45;
+      box-shadow:0 6px 18px rgba(0,0,0,.35); }}
+  div[data-testid="stMetric"] {{ animation:riseIn .42s ease both;
+      transition:border-color .18s ease, transform .18s ease; }}
+  div[data-testid="stMetric"]:hover {{ border-color:{ACCENT}45;
+      transform:translateY(-2px); }}
+
+  /* buttons gain a tactile press + crisper hover lift */
+  .stButton>button, .stDownloadButton>button {{
+      transition:all .15s cubic-bezier(.2,.7,.3,1) !important; }}
+  .stButton>button:hover, .stDownloadButton>button:hover {{
+      transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,0,0,.28); }}
+  .stButton>button:active, .stDownloadButton>button:active {{
+      transform:translateY(0) scale(.98); }}
+
+  /* progress-bar fills glide instead of snapping */
+  .pipe .seg .bar i {{ transition:width .6s cubic-bezier(.2,.7,.3,1); }}
+
+  @media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{
+      animation-duration:.001ms !important; animation-iteration-count:1 !important;
+      transition-duration:.001ms !important; }}
+  }}
+</style>
+""", unsafe_allow_html=True)
+
 
 # ───────────────────────────── components ─────────────────────────────
 def topbar(title: str, subtitle: str = "", meta: list[tuple[str, str]] | None = None):
